@@ -8,7 +8,8 @@
 <meta property="og:description" content="2층 난간·큐빅·천장 설치별로 무대 정면 영상이 어떻게 보이는지 3D로 확인해요.">
 <style>:root{color-scheme:light}body{margin:0;font:14px system-ui}[hidden]{display:none!important}</style>
 </head>
-<body><title>언더커버 삼신 투사 시뮬레이터</title>
+<body>
+<title>언더커버 삼신 투사 시뮬레이터</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -43,6 +44,9 @@ header .sub{color:var(--muted);font-size:12.5px;font-family:var(--f-mono)}
 .legend{position:absolute;left:10px;bottom:10px;background:rgba(20,23,29,.85);color:#e7e9ee;border:1px solid #3a414d;border-radius:6px;padding:8px 10px;font:12px var(--f-mono)}
 .legend .bar{width:220px;max-width:50vw;height:10px;border-radius:2px;margin-block:5px;background:linear-gradient(90deg,#0b1030,#1d4fa0,#18b3c4,#9be15d,#f7d23e,#f0502c,#ffffff)}
 .legend .ticks{display:flex;justify-content:space-between}
+.sizebadge{position:absolute;top:52px;left:10px;background:rgba(20,23,29,.85);color:#e7e9ee;border:1px solid #3a414d;border-radius:6px;padding:7px 10px;font:500 13px var(--f-body);line-height:1.45;max-width:calc(100% - 20px)}
+.sizebadge b{font:600 17px var(--f-mono);color:#f0b54a;font-variant-numeric:tabular-nums}
+.sizebadge:empty{display:none}
 .hint{position:absolute;right:10px;bottom:10px;color:#8d95a3;font-size:11.5px;text-align:right;pointer-events:none}
 aside{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;min-height:0}
 .sec{padding-block:14px;padding-inline:16px;border-bottom:1px solid var(--line);display:grid;gap:10px}
@@ -120,6 +124,7 @@ details .read{margin-top:8px}
       <div class="bar"></div>
       <div class="ticks"><span>0</span><span id="lg-mid">100</span><span id="lg-max">200</span></div>
     </div>
+    <div class="sizebadge" id="sizebadge" aria-live="polite"></div>
     <div class="hint">드래그 회전 · 우클릭 이동 · 휠 줌</div>
   </div>
 
@@ -370,14 +375,15 @@ MAT.person.uniforms.uAlb.value.setRGB(0.55,0.42,0.36);
 
 // ---------- labels ----------
 function label(text, color, scale){
-  const c = document.createElement('canvas'); c.width=256; c.height=64;
-  const g = c.getContext('2d'); g.font='600 34px "IBM Plex Sans KR","Malgun Gothic",sans-serif';
-  g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='rgba(12,14,18,.7)';
-  const tw = Math.min(250, g.measureText(text).width+24); g.fillRect(128-tw/2,8,tw,48);
-  g.fillStyle=color||'#e7e9ee'; g.fillText(text,128,33);
+  const FONT='600 34px "IBM Plex Sans KR","Malgun Gothic",sans-serif';
+  const c = document.createElement('canvas'); let g = c.getContext('2d'); g.font=FONT;
+  const W = Math.max(256, Math.ceil(g.measureText(text).width+40)); c.width=W; c.height=64;
+  g = c.getContext('2d'); g.font=FONT; g.textAlign='center'; g.textBaseline='middle';
+  g.fillStyle='rgba(12,14,18,.75)'; g.fillRect(W/2-(W-16)/2,8,W-16,48);
+  g.fillStyle=color||'#e7e9ee'; g.fillText(text,W/2,33);
   const t = new THREE.CanvasTexture(c);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:t, depthTest:false, transparent:true }));
-  s.scale.set(1.6*(scale||1),0.4*(scale||1),1); s.renderOrder=10; return s;
+  s.scale.set(0.4*(scale||1)*W/64,0.4*(scale||1),1); s.renderOrder=10; return s;
 }
 
 // ---------- room ----------
@@ -582,6 +588,7 @@ function updateProjector(p,i){
   p.body.position.copy(pos); p.body.quaternion.copy(p.cam.quaternion);
   p.lbl.position.copy(pos).add(new THREE.Vector3(0,0.45,0));
   // 투사 범위선
+  p.lines.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material){ if(o.material.map) o.material.map.dispose(); o.material.dispose(); } });
   p.lines.clear();
   if (!p.on || !$('t-frus').checked) return;
   const toDir = (lx,ly) => new THREE.Vector3(lx,ly,-1).applyQuaternion(p.cam.quaternion).normalize();
@@ -593,6 +600,42 @@ function updateProjector(p,i){
     p.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(per), new THREE.LineBasicMaterial({ color:p.color }))); }
   const fr=[]; cs.forEach(c=>{ const h=hitRoom(pos,toDir(c[0],c[1])); if(h) fr.push(pos,h.P); });
   p.lines.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fr), new THREE.LineBasicMaterial({ color:p.color, transparent:true, opacity:.45 })));
+  addDimensions(p,pos,W,toDir);
+}
+
+// 투사된 영상의 실제 치수(가로·세로·바닥에서 높이)와 투사거리를 3D 화면에 표시
+function addDimensions(p,pos,W,toDir){
+  const h = [[W.x0,W.y0],[W.x1,W.y0],[W.x1,W.y1],[W.x0,W.y1]].map(c=>hitRoom(pos,toDir(c[0],c[1])));
+  const hc = hitRoom(pos,toDir((W.x0+W.x1)/2,(W.y0+W.y1)/2));
+  const mat = new THREE.LineBasicMaterial({ color:0xffffff, depthTest:false, transparent:true });
+  const seg = (pts)=>{ const l=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),mat); l.renderOrder=9; p.lines.add(l); };
+  const tag = (txt,at,s)=>{ const l=label(txt,'#ffd27a',s||1.4); l.position.copy(at); p.lines.add(l); };
+  if (hc){
+    const z = hc.P.clone().sub(pos).dot(new THREE.Vector3(0,0,-1).applyQuaternion(p.cam.quaternion));
+    const dl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([pos,hc.P]), new THREE.LineDashedMaterial({ color:0xffffff, dashSize:.3, gapSize:.2, depthTest:false }));
+    dl.computeLineDistances(); dl.renderOrder=9; p.lines.add(dl);
+    tag('투사거리 '+z.toFixed(1)+' m', pos.clone().lerp(hc.P,0.5).add(new THREE.Vector3(0,0.4,0)), 1.3);
+  }
+  if (!h.every(x=>x && x.s===h[0].s)) return;
+  const [b0,b1,t1,t0] = h.map(x=>x.P), n = new THREE.Vector3(...h[0].s.nrm).multiplyScalar(0.03);
+  const down = b0.clone().sub(t0).normalize().multiplyScalar(0.3), left = b0.clone().sub(b1).normalize().multiplyScalar(0.3);
+  const tick = (a,d)=>[a.clone().add(d.clone().multiplyScalar(0.5)), a.clone().add(d.clone().multiplyScalar(1.5))];
+  // 가로 (위 모서리 바깥 — 아래쪽은 배우 이름표와 겹치므로)
+  const up = down.clone().negate();
+  const w0=t0.clone().add(up).add(n), w1=t1.clone().add(up).add(n);
+  seg([w0,w1, ...tick(t0.clone().add(n),up), ...tick(t1.clone().add(n),up)]);
+  tag('가로 '+t0.distanceTo(t1).toFixed(1)+' m', w0.clone().lerp(w1,0.5).add(up.clone().multiplyScalar(1.6)), 1.7);
+  // 세로 (왼쪽 모서리 바깥)
+  const v0=b0.clone().add(left).add(n), v1=t0.clone().add(left).add(n);
+  seg([v0,v1, ...tick(b0.clone().add(n),left), ...tick(t0.clone().add(n),left)]);
+  tag('세로 '+b0.distanceTo(t0).toFixed(1)+' m', v0.clone().lerp(v1,0.5).add(left.clone().multiplyScalar(5)), 1.7);
+  // 벽에 맺힐 때: 영상 아래 끝이 바닥에서 얼마나 떠 있는지
+  if (h[0].s.ax!=='y' && b0.y>0.05){
+    const fl = new THREE.Vector3(b0.x,0,b0.z).add(n);
+    const dl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([b0.clone().add(n),fl]), new THREE.LineDashedMaterial({ color:0xffffff, dashSize:.15, gapSize:.12, depthTest:false }));
+    dl.computeLineDistances(); dl.renderOrder=9; p.lines.add(dl);
+    tag('바닥에서 '+b0.y.toFixed(1)+' m', b0.clone().lerp(fl,0.35).add(left.clone().multiplyScalar(5)), 1.3);
+  }
 }
 
 // ---------- measurements ----------
@@ -685,6 +728,11 @@ function renderReadout(){
             ['픽셀 크기', f(m.px,1)+' mm'],
             ['무대 조명 번짐 (면)', f(m.Es,0)+' lux'],
             ['조명 켰을 때 명암비', m.contrast===Infinity ? '조명 꺼짐' : f(m.contrast,1)+' : 1']);
+  // 3D 화면 위 크기 배지
+  if (m.hc){
+    const e = m.ext, onWall = m.same && e && m.hc.s.ax!=='y';
+    $('sizebadge').innerHTML = `${p.name} 영상 크기 <b>${f(m.imgW,1)} × ${f(m.imgH,1)} m</b><br>대각 ${f(Math.hypot(m.imgW,m.imgH)/0.0254,0)}인치 · 투사거리 ${f(m.z,1)} m${onWall?` · 높이 ${f(e.h0,1)}–${f(e.h1,1)} m`:''}`;
+  } else $('sizebadge').innerHTML = '';
   // 한눈에 보기 (처음 보는 사람용 요약)
   const pill=(cls,t)=>`<span class="pill ${cls}">${t}</span>`;
   const g=[];
