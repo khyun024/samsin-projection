@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="언더커버 삼신 공연장 무대 정면에 프로젝터 한 대로 영상을 쏠 때 크기·밝기·가림·무대 조명 영향을 3D로 미리 보는 시뮬레이터">
+<meta property="og:title" content="언더커버 삼신 투사 시뮬레이터">
+<meta property="og:description" content="2층 난간·큐빅·천장 설치별로 무대 정면 영상이 어떻게 보이는지 3D로 확인해요.">
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui}[hidden]{display:none!important}</style>
+</head>
+<body><title>언더커버 삼신 투사 시뮬레이터</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 왼쪽 3D 블랙박스 뷰포트(항상 어두움) + 오른쪽 조작 콘솔. 좁은 화면에선 위아래로 쌓음 */
+:root{
+  --bg:#eef0f3; --panel:#fbfbfc; --ink:#1b1f27; --muted:#5d6574; --line:#d7dbe2;
+  --accent:#b8740f; --accent-ink:#ffffff; --field:#ffffff; --warn:#b4231f; --ok:#2d7a46;
+  --stage:#0c0e12;
+  --f-body:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#13161b; --panel:#1a1e25; --ink:#e7e9ee; --muted:#9aa2b1; --line:#2c323c;
+  --accent:#f0b54a; --accent-ink:#1a1206; --field:#11141a; --warn:#ff7b72; --ok:#6fcf8d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#13161b; --panel:#1a1e25; --ink:#e7e9ee; --muted:#9aa2b1; --line:#2c323c;
+  --accent:#f0b54a; --accent-ink:#1a1206; --field:#11141a; --warn:#ff7b72; --ok:#6fcf8d; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:auto minmax(0,1fr);height:100%;
+  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:17px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+header .sub{color:var(--muted);font-size:12.5px;font-family:var(--f-mono)}
+.view{position:relative;min-height:0;background:var(--stage);overflow:hidden}
+#gl{display:block;width:100%;height:100%;touch-action:none}
+.viewbar{position:absolute;top:10px;left:10px;display:flex;flex-wrap:wrap;gap:6px;max-width:calc(100% - 20px)}
+.viewbar button{background:rgba(20,23,29,.82);color:#e7e9ee;border:1px solid #3a414d;border-radius:6px;padding:5px 10px;font:500 12.5px var(--f-body);cursor:pointer}
+.viewbar button[aria-pressed="true"]{background:#f0b54a;color:#1a1206;border-color:#f0b54a}
+.legend{position:absolute;left:10px;bottom:10px;background:rgba(20,23,29,.85);color:#e7e9ee;border:1px solid #3a414d;border-radius:6px;padding:8px 10px;font:12px var(--f-mono)}
+.legend .bar{width:220px;max-width:50vw;height:10px;border-radius:2px;margin-block:5px;background:linear-gradient(90deg,#0b1030,#1d4fa0,#18b3c4,#9be15d,#f7d23e,#f0502c,#ffffff)}
+.legend .ticks{display:flex;justify-content:space-between}
+.hint{position:absolute;right:10px;bottom:10px;color:#8d95a3;font-size:11.5px;text-align:right;pointer-events:none}
+aside{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;min-height:0}
+.sec{padding-block:14px;padding-inline:16px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.sec h2{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:var(--field);cursor:pointer;font-weight:600}
+.chip[aria-selected="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip .dot{width:10px;height:10px;border-radius:50%}
+.chip input{margin:0}
+.btn{border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:6px;padding:5px 10px;font:500 13px var(--f-body);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row{display:grid;grid-template-columns:88px minmax(0,1fr) 64px;align-items:center;gap:8px}
+.row label{color:var(--muted);font-size:12.5px}
+.row output,.row .val{font:12.5px var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.row input[type=range]{width:100%;accent-color:var(--accent)}
+.row2{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:8px}
+.row2 label{color:var(--muted);font-size:12.5px}
+select,input[type=number]{width:100%;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font:13px var(--f-body)}
+input[type=number]{font-family:var(--f-mono)}
+.read{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.read dt{color:var(--muted)}
+.read dd{margin:0;text-align:right;font:13px var(--f-mono);font-variant-numeric:tabular-nums}
+.read dd.big{font-size:15px;font-weight:500}
+.warns{display:grid;gap:4px;font-size:12.5px}
+.warns div{color:var(--warn)}
+.warns div.ok{color:var(--ok)}
+.toggles{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
+.toggles label{display:flex;gap:6px;align-items:center}
+.note{color:var(--muted);font-size:12px;line-height:1.55}
+.note p{margin:0 0 6px}
+.intro p{margin:0;font-size:14px}
+.intro ol{margin:0;padding:0;list-style:none;display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.intro ol b{color:var(--ink)}
+details.sec{display:block}
+details.sec > * + *{margin-top:10px}
+details summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink)}
+details.sec > summary{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+details .read{margin-top:8px}
+.glance{display:grid;gap:8px}
+.g-row{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:8px;align-items:center;padding-block:8px;border-bottom:1px solid var(--line)}
+.g-row:last-child{border-bottom:0}
+.g-k{color:var(--muted);font-size:12.5px}
+.g-v{font-size:13.5px;line-height:1.4;min-width:0}
+.g-v small{display:block;color:var(--muted);font-size:12px}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;border:1px solid currentColor}
+.pill.good{color:var(--ok)} .pill.mid{color:var(--accent)} .pill.bad{color:var(--warn)}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 62vh auto;height:auto}
+  aside{border-left:0;overflow:visible}
+  .sec{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>언더커버 삼신 투사 시뮬레이터</h1>
+    <span class="sub">Epson EB-L1070U · WUXGA 1920×1200 · 실내 12.85 × 12.55 m</span>
+  </header>
+
+  <div class="view" id="view">
+    <canvas id="gl"></canvas>
+    <div class="viewbar" role="group" aria-label="시점">
+      <button id="v-orbit" aria-pressed="true">3/4 시점</button>
+      <button id="v-top" aria-pressed="false">평면(탑뷰)</button>
+      <button id="v-aud" aria-pressed="false">객석 시점</button>
+      <button id="v-side" aria-pressed="false">측면 단면</button>
+    </div>
+    <div class="legend" id="legend" hidden>
+      <div>조도 (lux, 프로젝터 합)</div>
+      <div class="bar"></div>
+      <div class="ticks"><span>0</span><span id="lg-mid">100</span><span id="lg-max">200</span></div>
+    </div>
+    <div class="hint">드래그 회전 · 우클릭 이동 · 휠 줌</div>
+  </div>
+
+  <aside>
+    <section class="sec intro">
+      <p>공연장 〈언더커버 삼신〉의 <b>무대 정면 벽</b>에 프로젝터 한 대로 영상을 쏘면 어떻게 보일지 미리 보는 도구예요. 실제 도면 치수로 만들었어요.</p>
+      <ol>
+        <li>① <b>어디에 놓을지</b> 고르세요. 버튼을 누르면 3D 화면이 바로 바뀌어요. 화면은 드래그로 돌려볼 수 있어요.</li>
+        <li>② <b>렌즈</b>를 고르세요. 렌즈에 따라 영상 크기가 크게 달라져요.</li>
+        <li>③ <b>한눈에 보기</b>에서 크기·밝기·가림·조명 영향을 확인하세요.</li>
+      </ol>
+    </section>
+
+    <section class="sec">
+      <h2>① 프로젝터를 어디에 놓을까요? <span id="selname" style="color:var(--ink)"></span></h2>
+      <div class="presets">
+        <button class="btn" data-preset="railRear">2층 난간 · 객석 뒤 가운데</button>
+        <button class="btn" data-preset="railLeft">2층 난간 · 왼쪽</button>
+        <button class="btn" data-preset="cubeRear">큐빅 쌓기 · 객석 맨 뒤</button>
+        <button class="btn" data-preset="cubeFront">큐빅 쌓기 · 객석 첫 줄 앞</button>
+        <button class="btn" data-preset="wall">천장에 매달기 · 객석 위</button>
+      </div>
+      <p class="note" style="margin:0">2층 높이와 큐빅 높이는 아직 정해지지 않아 아래 ‘공간’에서 바꿔볼 수 있어요. 높이를 바꾸면 프로젝터도 같이 올라가거나 내려가요.</p>
+    </section>
+
+    <section class="sec">
+      <h2>② 렌즈</h2>
+      <div class="presets">
+        <button class="btn" data-lens="ELPLM15">표준 렌즈 (ELPLM15)</button>
+        <button class="btn" data-lens="ELPLW05">광각 렌즈 (ELPLW05)</button>
+      </div>
+      <p class="note" style="margin:0">이 프로젝터(EB-L1070U)는 <b>렌즈가 따로</b>예요. 대여할 때 어떤 렌즈가 오는지 꼭 물어보세요. 표준 렌즈는 멀리서 쏘면 영상이 작고, 광각 렌즈는 같은 거리에서 약 2배 크게 나와요.</p>
+    </section>
+
+    <section class="sec">
+      <h2>③ 한눈에 보기</h2>
+      <div class="glance" id="glance"></div>
+      <div class="warns" id="warns"></div>
+      <details>
+        <summary>자세한 수치</summary>
+        <dl class="read" id="read"></dl>
+      </details>
+    </section>
+
+    <section class="sec">
+      <h2>무대 조명을 켜면?</h2>
+      <div class="row2"><label for="stage">무대 조명</label><select id="stage">
+        <option value="0">꺼짐 (영상만)</option>
+        <option value="80">어두운 장면 (배우 약 80 lux)</option>
+        <option value="300">보통 공연 조명 (배우 약 300 lux)</option>
+        <option value="700">밝은 공연 조명 (배우 약 700 lux)</option></select></div>
+      <div class="row"><label for="spill">벽으로 새는 빛</label><input type="range" id="spill" min="0" max="0.5" step="0.01"><output id="o-spill"></output></div>
+      <p class="note" style="margin:0">배우를 비춘 조명 일부는 뒤 벽(영상 면)에도 떨어져 영상을 흐리게 만들어요. 배우에게만 좁게 비추면 5% 안팎, 무대 전체를 넓게 밝히면 20–30%까지 새요.</p>
+    </section>
+
+    <details class="sec">
+      <summary>세부 조정 (직접 만지고 싶을 때)</summary>
+      <div class="chips" id="chips"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" id="add">+ 프로젝터 추가</button>
+        <button class="btn" id="del">선택 삭제</button>
+        <button class="btn" id="copy">설정 요약 복사</button>
+      </div>
+      <h2>렌즈 · 줌 · 시프트</h2>
+      <div class="row2"><label for="lens">렌즈</label><select id="lens"></select></div>
+      <div class="row"><label for="zoom">줌 (투사비)</label><input type="range" id="zoom" min="0" max="1" step="0.01"><output id="o-zoom"></output></div>
+      <div class="row"><label for="sv">시프트 상하</label><input type="range" id="sv" min="-0.67" max="0.67" step="0.01"><output id="o-sv"></output></div>
+      <div class="row"><label for="sh">시프트 좌우</label><input type="range" id="sh" min="-0.30" max="0.30" step="0.01"><output id="o-sh"></output></div>
+      <div class="row2"><label for="lm">밝기 (lm)</label><input type="number" id="lm" min="500" max="40000" step="100"></div>
+      <h2>위치 · 방향</h2>
+      <div class="row"><label for="px">X 좌측벽에서</label><input type="range" id="px" min="0" max="12.85" step="0.05"><output id="o-px"></output></div>
+      <div class="row"><label for="py">Y 무대벽에서</label><input type="range" id="py" min="0" max="12.55" step="0.05"><output id="o-py"></output></div>
+      <div class="row"><label for="pz">렌즈 높이</label><input type="range" id="pz" min="0.3" max="7" step="0.05"><output id="o-pz"></output></div>
+      <div class="row"><label for="yaw">방향 (수평)</label><input type="range" id="yaw" min="-180" max="180" step="1"><output id="o-yaw"></output></div>
+      <div class="row"><label for="pitch">숙임 (아래로)</label><input type="range" id="pitch" min="-15" max="90" step="1"><output id="o-pitch"></output></div>
+      <div class="row"><label for="roll">회전 (롤)</label><input type="range" id="roll" min="-90" max="90" step="1"><output id="o-roll"></output></div>
+      <p class="note" style="margin:0">방향 0° = 무대(뒷벽) 쪽, 90° = 오른쪽, −90° = 왼쪽, 180° = 객석 쪽. 숙임 90° = 바로 아래.</p>
+    </details>
+
+    <section class="sec">
+      <h2>내 영상으로 보기</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" id="pattern">테스트 패턴</button>
+        <span class="btn filebtn">이미지·영상 불러오기<input type="file" id="media" accept="image/*,video/*" aria-label="이미지 또는 영상 파일"></span>
+      </div>
+      <p class="note" style="margin:0">불러온 파일은 1920×1200(16:10) 화면에 맞춰 늘려 투사돼요. 파일은 이 브라우저 안에서만 쓰여요.</p>
+    </section>
+
+    <section class="sec">
+      <h2>공간</h2>
+      <div class="row"><label for="ceil">그리드 높이</label><input type="range" id="ceil" min="4" max="12" step="0.1"><output id="o-ceil"></output></div>
+      <div class="row"><label for="gal">2층 바닥 높이</label><input type="range" id="gal" min="2" max="8" step="0.1"><output id="o-gal"></output></div>
+      <div class="row"><label for="railH">난간 높이</label><input type="range" id="railH" min="0.8" max="1.4" step="0.05"><output id="o-railH"></output></div>
+      <div class="row"><label for="galDepth">2층 폭</label><input type="range" id="galDepth" min="0.6" max="3" step="0.1"><output id="o-galDepth"></output></div>
+      <div class="row"><label for="cubeH">큐빅 높이</label><input type="range" id="cubeH" min="0.4" max="3" step="0.1"><output id="o-cubeH"></output></div>
+      <p class="note" style="margin:0">정확한 높이를 모르면 슬라이더를 움직여 보며 가려짐이 사라지는 높이를 찾아보세요. 2층은 좌·우·객석 뒤 세 면에 있다고 가정했어요.</p>
+      <div class="row2"><label for="floor">바닥 마감</label><select id="floor">
+        <option value="0.06">블랙 무대바닥 (반사율 6%)</option>
+        <option value="0.35">회색 댄스플로어 (35%)</option>
+        <option value="0.75">흰색 바닥 시트 (75%)</option></select></div>
+      <div class="row2"><label for="wall">정면 벽 마감</label><select id="wall">
+        <option value="0.05">블랙 벽 그대로 (5%)</option>
+        <option value="0.3">회색 막 (30%)</option>
+        <option value="0.8">흰 스크린·막 (80%)</option></select></div>
+      <div class="toggles">
+        <label><input type="checkbox" id="t-cast"> 배우·악기</label>
+        <label><input type="checkbox" id="t-aud"> 관객 착석</label>
+        <label><input type="checkbox" id="t-frus"> 투사 범위선</label>
+      </div>
+    </section>
+
+    <details class="sec">
+      <summary>화면 표시 설정</summary>
+      <div class="row2"><label for="mode">모드</label><select id="mode">
+        <option value="0">영상 (보이는 밝기)</option>
+        <option value="1">밝기 지도 (lux)</option></select></div>
+      <div class="row"><label for="exp">노출</label><input type="range" id="exp" min="0.005" max="0.15" step="0.005"><output id="o-exp"></output></div>
+      <div class="row"><label for="amb">작업등</label><input type="range" id="amb" min="0" max="1" step="0.05"><output id="o-amb"></output></div>
+      <div class="row"><label for="hmax">지도 최대</label><input type="range" id="hmax" min="50" max="1000" step="50"><output id="o-hmax"></output></div>
+    </details>
+
+    <details class="sec note">
+      <summary>용어 풀이</summary>
+      <p><b>투사비</b> 영상 가로 1 m를 만들려면 몇 m 떨어져야 하는지. 투사비 2.2면 11 m 거리에서 가로 5 m.</p>
+      <p><b>렌즈 시프트</b> 프로젝터를 기울이지 않고 렌즈 안에서 영상을 위아래로 옮기는 기능. 기울이지 않으니 영상이 찌그러지지 않아요.</p>
+      <p><b>키스톤</b> 비스듬히 쏴서 영상이 사다리꼴로 찌그러지는 것. 보정하면 해상도가 조금 줄어요.</p>
+      <p><b>lux · nit</b> lux는 벽에 떨어지는 빛의 양, nit는 관객 눈에 보이는 밝기. 어두운 객석이면 30 nit 이상이면 무난하고, 80 nit 이상이면 밝아요.</p>
+      <p><b>명암비</b> 영상의 가장 밝은 곳과 검은 곳의 밝기 차이. 무대 조명이 벽에 새면 검은 곳이 회색으로 떠서 낮아져요. 10:1 이상이면 또렷, 4:1 아래면 흐릿해요.</p>
+    </details>
+
+    <section class="sec note">
+      <p><b>계산식.</b> 투사비 = 투사거리 ÷ 영상 가로. 영상 세로 = 가로 × 0.625(16:10). 조도는 수직면 기준 7,000 lm ÷ 영상 면적에 기울기(cos)를 곱했어요. 휘도(nit) = 조도 × 반사율 ÷ π.</p>
+      <p><b>출처.</b> 렌즈 투사비와 시프트(상하 ±67%, 좌우 ±30%)는 ProjectorCentral의 EB-L1070U 사양 페이지 기준이에요. 시프트 최대치는 렌즈마다 줄어들 수 있어요(특히 단초점). ELPLW06 투사비(1.62–2.22)는 이례적인 값이라 Epson 공식 사양으로 다시 확인하세요. EB-L1070U는 렌즈 미포함 모델이고, 표준 렌즈로 안내되는 ELPLM15의 투사비는 ProjectorCentral 기준 2.20–3.52예요(Epson은 같은 계열 기종에 2.16–3.48로 표기).</p>
+      <p><b>가정.</b> 평면 치수는 도면(12,850 × 12,550 mm)에서, 악기·의자·객석 위치는 도면 비율로 옮겼어요. 그리드·갤러리 높이는 도면에 없어 임의값이에요. 실제 밝기는 사양 루멘보다 낮게 나오고, 사람 그림자는 1.7 m 기둥형 인체로 근사했어요.</p>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const D2R = Math.PI/180;
+const ROOM = { W:12.85, D:12.55, H:7.0, gal:4.5, railH:1.1, galDepth:1.2, cubeH:1.8, curtainX:10.97 };
+const RES = { w:1920, h:1200, aspect:1200/1920 };
+const LENSES = [
+  { id:'ELPLX01',  name:'ELPLX01 초단초점 고정', min:0.35, max:0.35 },
+  { id:'ELPLU03S', name:'ELPLU03S 단초점 줌 #1', min:0.65, max:0.78 },
+  { id:'ELPLU04',  name:'ELPLU04 단초점 줌 #2',  min:0.87, max:1.05 },
+  { id:'ELPLW05',  name:'ELPLW05 광각 줌 #1',   min:1.04, max:1.46 },
+  { id:'ELPLW08',  name:'ELPLW08 줌',           min:1.18, max:1.66 },
+  { id:'ELPLM08',  name:'ELPLM08 중초점 줌 #1', min:1.44, max:2.32 },
+  { id:'ELPLW06',  name:'ELPLW06 광각 줌 #2 (값 확인 필요)', min:1.62, max:2.22 },
+  { id:'ELPLM15',  name:'ELPLM15 표준 중초점 줌 #2', min:2.20, max:3.52 },
+  { id:'ELPLM10',  name:'ELPLM10 중초점 줌 #3', min:3.32, max:5.06 },
+  { id:'ELPLM11',  name:'ELPLM11 중초점 줌 #4', min:4.85, max:7.38 },
+  { id:'ELPLL08',  name:'ELPLL08 장초점 줌',    min:7.21, max:10.11 },
+];
+const lensById = id => LENSES.find(l=>l.id===id) || LENSES[1];
+const PCOLORS = ['#f2b134','#5ec8e5','#e46f9b','#9bd36a'];
+const NP = 4, NEAR = 0.15, FAR = 40, SHADOW = 1536;
+
+const $ = id => document.getElementById(id);
+const toW = (x,y,h) => new THREE.Vector3(x-ROOM.W/2, h, y-ROOM.D/2);
+
+// ---------- renderer / scene ----------
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x0c0e12);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 200);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true;
+const helpers = new THREE.Group(); scene.add(helpers);   // 깊이 패스에서 숨김
+const occluders = new THREE.Group(); scene.add(occluders);
+
+// ---------- shared projector uniforms ----------
+const dummyTex = new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); dummyTex.needsUpdate = true;
+const dummyDepth = new THREE.DataTexture(new Uint8Array([255,255,255,255]),1,1); dummyDepth.needsUpdate = true;
+const shared = {
+  pVP:{ value:[...Array(NP)].map(()=>new THREE.Matrix4()) },
+  pPos:{ value:[...Array(NP)].map(()=>new THREE.Vector3()) },
+  pDir:{ value:[...Array(NP)].map(()=>new THREE.Vector3(0,-1,0)) },
+  pE0:{ value:new Array(NP).fill(0) },
+  pOn:{ value:new Array(NP).fill(0) },
+  uAmb:{ value:0.45 }, uExp:{ value:0.03 }, uStage:{ value:0 }, uSpill:{ value:0.12 }, uStageEdge:{ value:6.8-12.55/2 }, uMode:{ value:0 }, uHeatMax:{ value:200 },
+  uNear:{ value:NEAR }, uFar:{ value:FAR },
+};
+for (let i=0;i<NP;i++){ shared['pTex'+i]={value:dummyTex}; shared['pDep'+i]={value:dummyDepth}; }
+
+const VERT = `varying vec3 vW; varying vec3 vN;
+void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW=w.xyz; vN=normalize(mat3(modelMatrix)*normal);
+gl_Position = projectionMatrix*viewMatrix*w; }`;
+let FRAG = `varying vec3 vW; varying vec3 vN;
+uniform vec3 uAlb; uniform float uAmb,uExp,uMode,uHeatMax,uNear,uFar,uStage,uSpill,uStageEdge,uIsFront;
+// 무대 조명(객석 쪽 45° 프런트 + 위에서 떨어지는 빛) 근사: 연기 구역은 uStage lux, 정면 벽은 번짐 비율만큼
+float stageLux(vec3 N){
+  if(uStage<=0.0) return 0.0;
+  if(uIsFront>0.5) return uStage*uSpill;
+  float zone = 1.0-smoothstep(uStageEdge, uStageEdge+1.5, vW.z);
+  float facing = 0.45*max(N.y,0.0) + 0.75*max(N.z,0.0) + 0.15;
+  return uStage*facing*mix(0.04, 1.0, zone);
+}
+uniform mat4 pVP[${NP}]; uniform vec3 pPos[${NP}]; uniform vec3 pDir[${NP}]; uniform float pE0[${NP}]; uniform float pOn[${NP}];
+${[...Array(NP)].map((_,i)=>`uniform sampler2D pTex${i}; uniform sampler2D pDep${i};`).join('\n')}
+float linZ(float d){ float z=d*2.0-1.0; return 2.0*uNear*uFar/(uFar+uNear-z*(uFar-uNear)); }
+vec4 contrib(mat4 VP, vec3 pos, vec3 dir, float E0, float on, sampler2D tex, sampler2D dep, vec3 N){
+  if(on<0.5) return vec4(0.0);
+  vec4 c = VP*vec4(vW,1.0); if(c.w<=0.0) return vec4(0.0);
+  vec3 nd = c.xyz/c.w; if(abs(nd.x)>1.0||abs(nd.y)>1.0) return vec4(0.0);
+  vec2 uv = nd.xy*0.5+0.5;
+  vec3 L = vW-pos; float r = length(L); float z = dot(L,dir); if(z<=0.0) return vec4(0.0);
+  float ca = dot(N,-L/r); if(ca<=0.0) return vec4(0.0);
+  float sd = linZ(texture2D(dep,uv).r);
+  if(z-(0.03+0.10*(1.0-ca)) > sd) return vec4(0.0);
+  float E = E0*ca*r/(z*z*z);
+  vec3 col = pow(texture2D(tex,uv).rgb, vec3(2.2));
+  return vec4(col*E, E);
+}
+vec3 heat(float t){ t=clamp(t,0.0,1.0);
+  vec3 a=vec3(0.04,0.06,0.19), b=vec3(0.11,0.31,0.63), c=vec3(0.09,0.70,0.77), d=vec3(0.61,0.88,0.36), e=vec3(0.97,0.82,0.24), f=vec3(0.94,0.31,0.17);
+  if(t<0.2) return mix(a,b,t/0.2); if(t<0.4) return mix(b,c,(t-0.2)/0.2); if(t<0.6) return mix(c,d,(t-0.4)/0.2);
+  if(t<0.8) return mix(d,e,(t-0.6)/0.2); return mix(e,f,(t-0.8)/0.2); }
+void main(){
+  vec3 N = normalize(vN); if(!gl_FrontFacing) N=-N;
+  vec4 a = vec4(0.0);
+  ${[...Array(NP)].map((_,i)=>`a += contrib(pVP[${i}],pPos[${i}],pDir[${i}],pE0[${i}],pOn[${i}],pTex${i},pDep${i},N);`).join('\n  ')}
+  vec3 col;
+  if(uMode>0.5){
+    float t = a.a/uHeatMax;
+    col = a.a>0.5 ? heat(t) : (uAlb*0.5+0.02)*uAmb*0.6;
+    if(t>1.0) col = mix(col, vec3(1.0), clamp((t-1.0)*2.0,0.0,1.0));
+    float band = abs(fract(a.a/50.0)-0.5); if(a.a>0.5 && band>0.47) col*=0.7;
+  } else {
+    vec3 base = (uAlb*0.7+0.03)*uAmb*0.35;
+    col = base + (a.rgb + stageLux(N)*vec3(1.0,0.93,0.82))*uAlb*uExp;
+    col = 1.0-exp(-col*1.4);
+  }
+  gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), 1.0);
+}`;
+function rmat(alb,isFront){
+  const u = Object.assign({}, shared, { uAlb:{ value:new THREE.Color(alb,alb,alb) }, uIsFront:{ value:isFront?1:0 } });
+  return new THREE.ShaderMaterial({ uniforms:u, vertexShader:VERT, fragmentShader:FRAG });
+}
+const MAT = { floor:rmat(0.35), wall:rmat(0.05), front:rmat(0.8,true), ceil:rmat(0.05), obj:rmat(0.22), person:rmat(0.45), seat:rmat(0.10) };
+MAT.person.uniforms.uAlb.value.setRGB(0.55,0.42,0.36);
+
+// ---------- labels ----------
+function label(text, color, scale){
+  const c = document.createElement('canvas'); c.width=256; c.height=64;
+  const g = c.getContext('2d'); g.font='600 34px "IBM Plex Sans KR","Malgun Gothic",sans-serif';
+  g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='rgba(12,14,18,.7)';
+  const tw = Math.min(250, g.measureText(text).width+24); g.fillRect(128-tw/2,8,tw,48);
+  g.fillStyle=color||'#e7e9ee'; g.fillText(text,128,33);
+  const t = new THREE.CanvasTexture(c);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:t, depthTest:false, transparent:true }));
+  s.scale.set(1.6*(scale||1),0.4*(scale||1),1); s.renderOrder=10; return s;
+}
+
+// ---------- room ----------
+let roomGroup = null, galleryLines = null, galGroup = null;
+function buildRoom(){
+  if (roomGroup){ scene.remove(roomGroup); roomGroup.traverse(o=>o.geometry&&o.geometry.dispose()); }
+  roomGroup = new THREE.Group(); scene.add(roomGroup);
+  const {W,D,H} = ROOM;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W,D).rotateX(-Math.PI/2), MAT.floor);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(W,H).translate(0,H/2,0), MAT.front); back.position.z=-D/2;
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(W,H).translate(0,H/2,0).rotateY(Math.PI), MAT.wall); front.position.z=D/2;
+  const left = new THREE.Mesh(new THREE.PlaneGeometry(D,H).translate(0,H/2,0).rotateY(Math.PI/2), MAT.wall); left.position.x=-W/2;
+  const right = new THREE.Mesh(new THREE.PlaneGeometry(D,H).translate(0,H/2,0).rotateY(-Math.PI/2), MAT.wall); right.position.x=W/2;
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W,D).rotateX(Math.PI/2), MAT.ceil); ceil.position.y=H;
+  roomGroup.add(floor,back,front,left,right,ceil);
+
+  // 2층 (좌·우·객석 뒤): 바닥 슬래브 + 난간
+  galGroup = new THREE.Group(); roomGroup.add(galGroup);
+  const gd=ROOM.galDepth, gz=ROOM.gal, rh=ROOM.railH;
+  const slab=(w,d,cx,cy)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,0.25,d),MAT.obj); m.position.copy(toW(cx,cy,gz-0.125)); galGroup.add(m); };
+  slab(gd,D,gd/2,D/2); slab(gd,D,W-gd/2,D/2); slab(W-2*gd,gd,W/2,D-gd/2);
+  const rail=(x0,y0,x1,y1)=>{
+    const len=Math.hypot(x1-x0,y1-y0), ang=Math.atan2(y1-y0,x1-x0), cx=(x0+x1)/2, cy=(y0+y1)/2;
+    [rh-0.03, rh*0.5].forEach(h=>{ const b=new THREE.Mesh(new THREE.BoxGeometry(len,0.06,0.06),MAT.obj);
+      b.position.copy(toW(cx,cy,gz+h)); b.rotation.y=-ang; galGroup.add(b); });
+    const n=Math.max(1,Math.ceil(len/1.5));
+    for(let k=0;k<=n;k++){ const t=k/n; const pst=new THREE.Mesh(new THREE.BoxGeometry(0.05,rh,0.05).translate(0,rh/2,0),MAT.obj);
+      pst.position.copy(toW(x0+(x1-x0)*t,y0+(y1-y0)*t,gz)); galGroup.add(pst); }
+  };
+  rail(gd,0,gd,D-gd); rail(W-gd,0,W-gd,D-gd); rail(gd,D-gd,W-gd,D-gd);
+
+  // 보조선: 방 모서리, 1 m 그리드, 커튼 라인, 갤러리 높이
+  const lines = new THREE.Group(); roomGroup.add(lines); lines.userData.helper = true;
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,D).translate(0,H/2,0)),
+    new THREE.LineBasicMaterial({ color:0x4a5260 })); lines.add(edge);
+  const gp = [];
+  for (let x=1;x<W;x++){ gp.push(x-W/2,0.004,-D/2, x-W/2,0.004,D/2); }
+  for (let y=1;y<D;y++){ gp.push(-W/2,0.004,y-D/2, W/2,0.004,y-D/2); }
+  const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(gp,3));
+  lines.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color:0x2a303a, transparent:true, opacity:.55 })));
+  const cg = new THREE.BufferGeometry().setFromPoints([toW(ROOM.curtainX,0,0.006), toW(ROOM.curtainX,D,0.006)]);
+  const cl = new THREE.Line(cg, new THREE.LineDashedMaterial({ color:0x7a8392, dashSize:.25, gapSize:.18 })); cl.computeLineDistances(); lines.add(cl);
+  const g = ROOM.gal, galPts = [toW(0,D,g),toW(0,0,g),toW(W,0,g),toW(W,D,g)];
+  const gl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(galPts), new THREE.LineDashedMaterial({ color:0x8a6d3b, dashSize:.3, gapSize:.2 }));
+  gl.computeLineDistances(); lines.add(gl);
+  const lg = label('2층 '+g.toFixed(1)+' m','#c9a46a',0.8); lg.position.copy(toW(ROOM.galDepth/2,ROOM.D-0.6,g+ROOM.railH+0.35)); lines.add(lg);
+  const lc = label('커튼 라인','#9aa2b1',0.7); lc.position.copy(toW(ROOM.curtainX,12.2,0.3)); lines.add(lc);
+  helpers.add(lines);
+  if (galleryLines) helpers.remove(galleryLines);
+  galleryLines = lines;
+}
+
+// ---------- cast / set (도면 비율로 옮긴 위치, 단위 m) ----------
+const castGroup = new THREE.Group(), audGroup = new THREE.Group(), seatGroup = new THREE.Group();
+occluders.add(castGroup, audGroup, seatGroup);
+function box(w,h,d,mat,x,y,rot){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d).translate(0,h/2,0),mat); m.position.copy(toW(x,y,0)); m.rotation.y=-(rot||0)*D2R; return m; }
+function person(x,y,h,mat){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,h*0.78,14).translate(0,h*0.39,0), mat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12,16,12).translate(0,h*0.78+0.12,0), mat);
+  g.add(body,head); g.position.copy(toW(x,y,0)); return g;
+}
+function buildSet(){
+  const inst = [ ['Pf1',0.68,2.10,0.55,1.95,0], ['Pf2',2.84,1.13,1.9,0.6,-20], ['G.',5.05,0.73,1.9,0.55,0],
+                 ['Bass',7.64,1.06,1.9,0.55,10], ['Drum',9.88,1.74,2.0,1.1,30] ];
+  inst.forEach(([n,x,y,w,d,r])=>{ castGroup.add(box(w,1.0,d,MAT.obj,x,y,r));
+    const l = label(n,'#cfd5df',0.7); l.position.copy(toW(x,y,1.45)); castGroup.add(l); });
+  const names = ['염라','지혜','삼신','우진','연두','옥황'], xs=[1.59,3.21,4.82,6.35,7.90,9.47];
+  xs.forEach((x,i)=>{
+    castGroup.add(box(0.5,0.45,0.5,MAT.seat,x,4.42,0));
+    castGroup.add(person(x,5.15,1.7,MAT.person));
+    const l = label(names[i],'#ffffff',0.75); l.position.copy(toW(x,5.15,2.15)); castGroup.add(l);
+  });
+  const rows=[9.19,9.76,10.38,10.98,11.59];
+  rows.forEach(y=>{ for(let b=0;b<2;b++) for(let k=0;k<9;k++){ const x=(b?5.93:0.30)+0.595*k+0.22;
+    seatGroup.add(box(0.44,0.45,0.44,MAT.seat,x,y,0)); audGroup.add(person(x,y+0.05,1.25,MAT.person)); } });
+}
+
+// ---------- projectors ----------
+const projectors = [];
+let sel = 0, uid = 0;
+function makePattern(p){
+  const c = document.createElement('canvas'); c.width=1280; c.height=800;
+  const g = c.getContext('2d');
+  g.fillStyle='#ececec'; g.fillRect(0,0,1280,800);
+  g.strokeStyle=p.color; g.lineWidth=3;
+  for (let i=1;i<8;i++){ g.beginPath(); g.moveTo(i*160,0); g.lineTo(i*160,800); g.stroke(); }
+  for (let j=1;j<5;j++){ g.beginPath(); g.moveTo(0,j*160); g.lineTo(1280,j*160); g.stroke(); }
+  g.lineWidth=18; g.strokeRect(9,9,1262,782);
+  g.lineWidth=6; g.beginPath(); g.arc(640,400,300,0,Math.PI*2); g.stroke();
+  g.fillStyle='#1b1f27'; g.textAlign='center'; g.textBaseline='middle';
+  g.font='700 150px "IBM Plex Sans KR",sans-serif'; g.fillText(p.name,640,370);
+  g.font='500 40px "IBM Plex Mono",monospace'; g.fillText('1920 × 1200  16:10',640,490);
+  g.font='600 44px "IBM Plex Sans KR",sans-serif';
+  g.textAlign='left'; g.fillText('↖ 위',40,60); g.textAlign='right'; g.fillText('위 ↗',1240,60);
+  g.textAlign='left'; g.fillText('↙ 아래',40,745); g.textAlign='right'; g.fillText('아래 ↘',1240,745);
+  const t = new THREE.CanvasTexture(c); t.minFilter=THREE.LinearMipmapLinearFilter; t.anisotropy=8; return t;
+}
+function newProjector(preset){
+  const i = projectors.length;
+  const p = { uid:++uid, name:'P'+(i+1), color:PCOLORS[i%4], on:true, x:5.5,y:3.2,z:6.5,yaw:0,pitch:90,roll:0,
+              lens:'ELPLU03S', zoom:0, sv:0, sh:0, lm:7000, media:null };
+  p.cam = new THREE.PerspectiveCamera(); p.cam.matrixAutoUpdate = true;
+  p.rt = new THREE.WebGLRenderTarget(SHADOW,SHADOW,{ depthBuffer:true });
+  p.rt.depthTexture = new THREE.DepthTexture(SHADOW,SHADOW); p.rt.depthTexture.type = THREE.UnsignedIntType;
+  p.pattern = makePattern(p); p.tex = p.pattern;
+  // 본체: 21.5" × 7.4" × 19.1" ≈ 0.55 × 0.19 × 0.49 m
+  p.body = new THREE.Group();
+  const bm = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.19,0.49).translate(0,0,0.27), new THREE.MeshBasicMaterial({ color:p.color }));
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.07,0.08,16).rotateX(Math.PI/2), new THREE.MeshBasicMaterial({ color:0x111111 }));
+  p.body.add(bm,lens);
+  p.lbl = label(p.name,p.color,0.7);
+  p.lines = new THREE.Group(); p.stand = new THREE.Group();
+  helpers.add(p.body,p.lbl,p.lines,p.stand);
+  projectors.push(p);
+  if (preset) applyPreset(p,preset);
+  return p;
+}
+// 모든 방식이 무대 정면(뒷벽, Y=0)을 향함. 가능한 한 숙이지 않고 렌즈 시프트로 영상 높이를 맞춰 키스톤을 없앰
+let preferLens = 'ELPLM15';
+const AIM_H = 3.6;   // 영상 중심을 정면 벽 이 높이에 맞춤
+function applyPreset(p,k){
+  const H=ROOM.H;
+  Object.assign(p, { roll:0, sh:0, sv:0, pitch:0, mount:null, lens:preferLens, zoom:0 });
+  if (k==='railRear')  Object.assign(p,{ mount:'railRear', x:5.5, yaw:0 });
+  if (k==='railLeft')  Object.assign(p,{ mount:'railLeft', y:8.0, yaw:26 });
+  if (k==='cubeRear')  Object.assign(p,{ mount:'cube', x:5.7, y:12.15, yaw:0 });
+  if (k==='cubeFront') Object.assign(p,{ mount:'cube', x:5.5, y:8.5, yaw:0 });
+  if (k==='wall')      Object.assign(p,{ x:5.5, y:8.6, z:H-0.5, yaw:0 });
+  resolveMount(p); aim(p);
+}
+// 렌즈 시프트로 영상 높이 맞추기 (기울이지 않으니 키스톤 없음)
+function aim(p){
+  const d = p.y/Math.max(0.2,Math.cos(p.yaw*D2R)), Hh = d/tr(p)*RES.aspect;
+  p.sv = Math.round(Math.max(-0.67, Math.min(0.67, (AIM_H-p.z)/Hh))*100)/100;
+}
+// 난간·큐빅에 올린 프로젝터는 공간 슬라이더(높이)를 따라감
+function resolveMount(p){
+  const lensOnTop = ROOM.gal + ROOM.railH + 0.15;
+  if (p.mount==='railRear'){ p.z = lensOnTop; p.y = ROOM.D - ROOM.galDepth - 0.35; }
+  if (p.mount==='railLeft'){ p.z = lensOnTop; p.x = ROOM.galDepth + 0.35; }
+  if (p.mount==='cube') p.z = ROOM.cubeH + 0.12;
+  p.z = Math.min(p.z, ROOM.H-0.1);
+}
+function clearProjectors(){
+  projectors.forEach(p=>{ helpers.remove(p.body,p.lbl,p.lines,p.stand); p.rt.dispose(); if(p.media) p.media.dispose(); });
+  projectors.length = 0;
+  for (let i=0;i<NP;i++){ shared.pOn.value[i]=0; shared['pTex'+i].value=dummyTex; shared['pDep'+i].value=dummyDepth; }
+}
+function tr(p){ const L=lensById(p.lens); return L.min + (L.max-L.min)*p.zoom; }
+function localWindow(p){ const t=tr(p), w=1/t, h=w*RES.aspect;
+  return { x0:(p.sh-0.5)*w, x1:(p.sh+0.5)*w, y0:(p.sv-0.5)*h, y1:(p.sv+0.5)*h, w, h, t }; }
+
+// 방 내부 면과의 교차 (사람·악기 제외)
+const SURF = [
+  { n:'바닥',   ax:'y', v:()=>0,          nrm:[0,1,0] },
+  { n:'천장',   ax:'y', v:()=>ROOM.H,     nrm:[0,-1,0] },
+  { n:'좌측 벽', ax:'x', v:()=>-ROOM.W/2, nrm:[1,0,0] },
+  { n:'우측 벽', ax:'x', v:()=>ROOM.W/2,  nrm:[-1,0,0] },
+  { n:'무대 뒷벽', ax:'z', v:()=>-ROOM.D/2, nrm:[0,0,1] },
+  { n:'객석 뒷벽', ax:'z', v:()=>ROOM.D/2,  nrm:[0,0,-1] },
+];
+function hitRoom(o,d){
+  let best=null; const e=1e-4, hx=ROOM.W/2+e, hz=ROOM.D/2+e;
+  for (const s of SURF){
+    const dv = d[s.ax]; if (Math.abs(dv)<1e-9) continue;
+    const t = (s.v()-o[s.ax])/dv; if (t<=1e-6) continue;
+    const P = o.clone().addScaledVector(d,t);
+    if (Math.abs(P.x)>hx || Math.abs(P.z)>hz || P.y<-e || P.y>ROOM.H+e) continue;
+    if (!best || t<best.t) best = { t, P, s };
+  }
+  return best;
+}
+function inside(p){ return p.x>=0&&p.x<=ROOM.W&&p.y>=0&&p.y<=ROOM.D&&p.z>0&&p.z<ROOM.H; }
+
+const standMat = new THREE.MeshBasicMaterial({ color:0x3b4250 }), standEdge = new THREE.LineBasicMaterial({ color:0x8a93a3 });
+function updateProjector(p,i){
+  resolveMount(p);
+  const pos = toW(p.x,p.y,p.z);
+  // 큐빅 스택(0.4 m 단위) — 본체 아래
+  p.stand.clear();
+  if (p.mount==='cube'){
+    const cx = p.x - 0.27*Math.sin(p.yaw*D2R), cy = p.y + 0.27*Math.cos(p.yaw*D2R), top = p.z-0.12;
+    for (let h=0; h<top-1e-3; h+=0.4){ const hh=Math.min(0.4,top-h);
+      const g=new THREE.BoxGeometry(0.6,hh,0.6).translate(0,hh/2,0);
+      const m=new THREE.Mesh(g,standMat); m.position.copy(toW(cx,cy,h)); m.rotation.y=-p.yaw*D2R;
+      const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),standEdge); e.position.copy(m.position); e.rotation.copy(m.rotation);
+      p.stand.add(m,e); }
+  }
+  p.cam.position.copy(pos);
+  p.cam.rotation.set(-p.pitch*D2R, -p.yaw*D2R, p.roll*D2R, 'YXZ');
+  p.cam.updateMatrixWorld(true);
+  const W = localWindow(p);
+  p.cam.projectionMatrix.makePerspective(W.x0*NEAR, W.x1*NEAR, W.y1*NEAR, W.y0*NEAR, NEAR, FAR);
+  p.cam.projectionMatrixInverse.copy(p.cam.projectionMatrix).invert();
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(p.cam.quaternion);
+  shared.pVP.value[i].multiplyMatrices(p.cam.projectionMatrix, p.cam.matrixWorldInverse);
+  shared.pPos.value[i].copy(pos); shared.pDir.value[i].copy(dir);
+  shared.pE0.value[i] = p.lm * W.t * W.t / RES.aspect;
+  shared.pOn.value[i] = p.on ? 1 : 0;
+  shared['pTex'+i].value = p.tex; shared['pDep'+i].value = p.rt.depthTexture;
+  p.body.position.copy(pos); p.body.quaternion.copy(p.cam.quaternion);
+  p.lbl.position.copy(pos).add(new THREE.Vector3(0,0.45,0));
+  // 투사 범위선
+  p.lines.clear();
+  if (!p.on || !$('t-frus').checked) return;
+  const toDir = (lx,ly) => new THREE.Vector3(lx,ly,-1).applyQuaternion(p.cam.quaternion).normalize();
+  const per=[], N=24, cs=[[W.x0,W.y0],[W.x1,W.y0],[W.x1,W.y1],[W.x0,W.y1]];
+  for (let k=0;k<4;k++){ const a=cs[k], b=cs[(k+1)%4];
+    for (let s=0;s<N;s++){ const t=s/N; const h=hitRoom(pos,toDir(a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t));
+      if (h) per.push(h.P.clone().add(new THREE.Vector3(...h.s.nrm).multiplyScalar(0.012))); } }
+  if (per.length>2){ per.push(per[0]);
+    p.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(per), new THREE.LineBasicMaterial({ color:p.color }))); }
+  const fr=[]; cs.forEach(c=>{ const h=hitRoom(pos,toDir(c[0],c[1])); if(h) fr.push(pos,h.P); });
+  p.lines.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(fr), new THREE.LineBasicMaterial({ color:p.color, transparent:true, opacity:.45 })));
+}
+
+// ---------- measurements ----------
+const raycaster = new THREE.Raycaster();
+function shownChain(o){ for(;o;o=o.parent) if(!o.visible) return false; return true; }
+function kindOf(o){ for(;o;o=o.parent){ if(o===audGroup) return '관객'; if(o===castGroup) return '배우·악기';
+  if(o===seatGroup) return '객석 의자'; if(o===galGroup) return '2층·난간'; } return '기타'; }
+// 영상 화면을 9×6 격자로 쏴서, 벽에 닿기 전에 걸리는 물체 비율
+function occlusion(pos,q,W){
+  const res={}, N=[9,6]; let n=0;
+  scene.updateMatrixWorld(); raycaster.camera = camera;
+  const targets=[occluders, galGroup].filter(Boolean);
+  for (let a=0;a<N[0];a++) for (let b=0;b<N[1];b++){
+    const lx=W.x0+(W.x1-W.x0)*(a+0.5)/N[0], ly=W.y0+(W.y1-W.y0)*(b+0.5)/N[1];
+    const d=new THREE.Vector3(lx,ly,-1).applyQuaternion(q).normalize(), h=hitRoom(pos,d); if(!h) continue;
+    n++; raycaster.set(pos,d); raycaster.far=h.t-0.05;
+    const hit=raycaster.intersectObjects(targets,true).find(x=>x.object.isMesh&&shownChain(x.object));
+    if (hit){ const k=kindOf(hit.object); res[k]=(res[k]||0)+1; }
+  }
+  Object.keys(res).forEach(k=>res[k]=Math.round(res[k]/Math.max(1,n)*100));
+  return res;
+}
+function measure(p){
+  resolveMount(p);
+  const pos = toW(p.x,p.y,p.z), W = localWindow(p);
+  p.cam.rotation.set(-p.pitch*D2R, -p.yaw*D2R, p.roll*D2R, 'YXZ'); p.cam.position.copy(pos); p.cam.updateMatrixWorld(true);
+  const q = p.cam.quaternion, axis = new THREE.Vector3(0,0,-1).applyQuaternion(q);
+  const cdir = new THREE.Vector3((W.x0+W.x1)/2,(W.y0+W.y1)/2,-1).applyQuaternion(q).normalize();
+  const hc = hitRoom(pos,cdir);
+  const corners = [[W.x0,W.y0],[W.x1,W.y0],[W.x1,W.y1],[W.x0,W.y1]].map(c=>hitRoom(pos,new THREE.Vector3(c[0],c[1],-1).applyQuaternion(q).normalize()));
+  const r = { W, hc, corners, occ:occlusion(pos,q,W) };
+  if (hc){
+    const z = hc.P.clone().sub(pos).dot(axis), rr = hc.t;
+    const n = new THREE.Vector3(...hc.s.nrm), ca = Math.max(0, n.dot(cdir.clone().negate()));
+    r.z = z; r.imgW = z/W.t; r.imgH = r.imgW*RES.aspect;
+    r.E = (p.lm*W.t*W.t/RES.aspect) * ca * rr / (z*z*z);
+    r.inc = Math.acos(Math.min(1,ca))/D2R;
+    // 키스톤은 렌즈 축과 면의 각도로 결정 (렌즈 시프트로 옮긴 건 왜곡 없음)
+    r.tilt = Math.acos(Math.min(1,Math.max(0,n.dot(axis.clone().negate()))))/D2R;
+    r.rho = hc.s.n==='바닥' ? +$('floor').value : (hc.s.n==='무대 뒷벽' ? +$('wall').value : 0.05);
+    r.nits = r.E*r.rho/Math.PI;
+    // 무대 조명이 같은 면에 더하는 빛 (셰이더의 stageLux와 같은 근사)
+    const S = shared.uStage.value;
+    r.Es = !S ? 0 : (hc.s.n==='무대 뒷벽' ? S*shared.uSpill.value : S*(hc.s.n==='바닥' ? 0.6 : 0.15));
+    r.contrast = r.Es>0 ? (r.E+r.Es)/r.Es : Infinity;
+    r.px = r.imgW/RES.w*1000;
+  }
+  const same = corners.every(c=>c && hc && c.s===hc.s);
+  r.same = same;
+  if (same && hc){
+    const ax = hc.s.ax==='y' ? ['x','z'] : (hc.s.ax==='x' ? ['z','y'] : ['x','y']);
+    const pts = corners.map(c=>[c.P[ax[0]],c.P[ax[1]]]);
+    let A=0; for(let k=0;k<4;k++){ const a=pts[k], b=pts[(k+1)%4]; A+=a[0]*b[1]-b[0]*a[1]; }
+    r.area = Math.abs(A)/2;
+    const xs=pts.map(v=>v[0]), ys=pts.map(v=>v[1]);
+    r.bw = Math.max(...xs)-Math.min(...xs); r.bh = Math.max(...ys)-Math.min(...ys);
+    // 실제 면 위 위치(도면 좌표)
+    const P = corners.map(c=>c.P);
+    r.ext = { x0:Math.min(...P.map(v=>v.x))+ROOM.W/2, x1:Math.max(...P.map(v=>v.x))+ROOM.W/2,
+              y0:Math.min(...P.map(v=>v.z))+ROOM.D/2, y1:Math.max(...P.map(v=>v.z))+ROOM.D/2,
+              h0:Math.min(...P.map(v=>v.y)), h1:Math.max(...P.map(v=>v.y)) };
+  }
+  return r;
+}
+const f = (v,d=2) => (v==null||!isFinite(v)) ? '—' : v.toFixed(d);
+function renderReadout(){
+  const p = projectors[sel]; if (!p) { $('read').innerHTML=''; $('warns').innerHTML=''; return; }
+  const m = measure(p), L = lensById(p.lens);
+  const MOUNT = { railRear:'2층 난간 (객석 뒤)', railLeft:'2층 난간 (좌측)', cube:'큐빅 스택 '+f(ROOM.cubeH,1)+' m' };
+  const rows = [
+    ['설치', MOUNT[p.mount] || '직접 배치'],
+    ['렌즈 높이 (바닥에서)', f(p.z)+' m'],
+    ['렌즈', L.id],
+    ['현재 투사비', f(m.W.t,2)+' : 1'],
+    ['영상 중심이 닿는 면', m.hc ? m.hc.s.n : '없음'],
+    ['투사거리 (렌즈 축)', f(m.z)+' m'],
+    ['수직면 기준 영상', `${f(m.imgW)} × ${f(m.imgH)} m`],
+    ['대각', m.imgW ? f(Math.hypot(m.imgW,m.imgH))+' m · '+f(Math.hypot(m.imgW,m.imgH)/0.0254,0)+'″' : '—'],
+  ];
+  if (m.same && m.ext){
+    const e = m.ext;
+    if (m.hc.s.ax==='y') rows.push(['면 위 실제 범위', `X ${f(e.x0,1)}–${f(e.x1,1)} · Y ${f(e.y0,1)}–${f(e.y1,1)} m`]);
+    else if (m.hc.s.ax==='z') rows.push(['면 위 실제 범위', `X ${f(e.x0,1)}–${f(e.x1,1)} · 높이 ${f(e.h0,1)}–${f(e.h1,1)} m`]);
+    else rows.push(['면 위 실제 범위', `Y ${f(e.y0,1)}–${f(e.y1,1)} · 높이 ${f(e.h0,1)}–${f(e.h1,1)} m`]);
+    rows.push(['맺힌 면적', f(m.area,1)+' ㎡']);
+  }
+  rows.push(['면과 렌즈 축 각도', f(m.tilt,0)+'° (0°면 키스톤 없음)'],
+            ['중심 조도', f(m.E,0)+' lux'],
+            ['중심 휘도', `${f(m.nits,1)} nit · ${f(m.nits/3.426,1)} fL`],
+            ['픽셀 크기', f(m.px,1)+' mm'],
+            ['무대 조명 번짐 (면)', f(m.Es,0)+' lux'],
+            ['조명 켰을 때 명암비', m.contrast===Infinity ? '조명 꺼짐' : f(m.contrast,1)+' : 1']);
+  // 한눈에 보기 (처음 보는 사람용 요약)
+  const pill=(cls,t)=>`<span class="pill ${cls}">${t}</span>`;
+  const g=[];
+  g.push(['놓는 곳', `${MOUNT[p.mount]||'천장 행잉 / 직접 배치'}<small>렌즈 높이 ${f(p.z,1)} m · ${L.id}${L.id==='ELPLM15'?' (표준)':''}</small>`, '']);
+  if (m.hc){
+    const onFront = m.hc.s.n==='무대 뒷벽';
+    g.push(['영상 크기', `가로 ${f(m.imgW,1)} × 세로 ${f(m.imgH,1)} m<small>${onFront?`정면 벽 가로 ${ROOM.W} m 중 약 ${Math.round(m.imgW/ROOM.W*100)}%`:`영상이 ${m.hc.s.n}에 맺혀요`}</small>`,
+      m.imgW>=7?pill('good','큼'):m.imgW>=4.5?pill('mid','보통'):pill('bad','작음')]);
+    g.push(['밝기', `${f(m.nits,0)} nit<small>조명 끈 어두운 객석 기준</small>`,
+      m.nits>=30?pill('good','충분'):m.nits>=15?pill('mid','조금 어두움'):pill('bad','어두움')]);
+    const occ = Object.values(m.occ).reduce((a,b)=>a+b,0);
+    g.push(['가림', occ ? `영상의 약 ${occ}%<small>${Object.entries(m.occ).filter(e=>e[1]).map(e=>e[0]).join(', ')}에 가려 그림자</small>` : '없음<small>관객·배우·난간에 안 걸려요</small>',
+      !occ?pill('good','없음'):occ<=10?pill('mid','조금'):pill('bad','많음')]);
+    const S = shared.uStage.value || 300, Es = onFront ? S*shared.uSpill.value : S*0.6, cr = Es>0 ? (m.E+Es)/Es : Infinity;
+    g.push(['무대 조명', `켜면 명암비 ${cr===Infinity?'∞':f(cr,1)+' : 1'}<small>${shared.uStage.value?'선택한 조명 기준':'보통 공연 조명(300 lux)을 켰다고 가정'}, 벽으로 새는 빛 ${Math.round(shared.uSpill.value*100)}%</small>`,
+      cr>=10?pill('good','또렷'):cr>=4?pill('mid','조금 흐림'):pill('bad','흐림')]);
+    g.push(['찌그러짐', m.tilt>3?`비스듬히 ${f(m.tilt,0)}°<small>사다리꼴 보정 필요</small>`:'없음<small>정면으로 쏴서 반듯해요</small>',
+      m.tilt>3?pill('mid','보정 필요'):pill('good','반듯')]);
+  } else g.push(['영상', '어느 면에도 닿지 않아요', pill('bad','확인')]);
+  $('glance').innerHTML = g.map(([k,v,c])=>`<div class="g-row"><div class="g-k">${k}</div><div class="g-v">${v}</div><div>${c}</div></div>`).join('');
+  $('read').innerHTML = rows.map(([k,v])=>`<dt>${k}</dt><dd class="${k.startsWith('수직면')||k==='중심 휘도'?'big':''}">${v}</dd>`).join('');
+  const w = [];
+  Object.entries(m.occ).forEach(([k,v])=>{ if(v>0) w.push(`영상의 약 ${v}%가 ${k}에 가려져 그림자가 생겨요.`); });
+  if (p.mount==='cube' && p.y>5.5 && p.y<9.19 && p.z>1.1) w.push('큐빅이 객석 첫 줄 앞에 있어 관객 시야를 가릴 수 있어요.');
+  if (!inside(p)) w.push('프로젝터가 실내 범위 밖에 있어요.');
+  if (!p.on) w.push('이 프로젝터는 꺼져 있어요.');
+  if (m.hc && !m.same) w.push('영상이 두 면 이상에 걸쳐 꺾여 맺혀요(모서리 넘침).');
+  if (m.tilt>3) w.push(`렌즈 축이 면과 ${f(m.tilt,0)}° 틀어져서 영상이 사다리꼴이 돼요(약 ${f(1/Math.cos(m.tilt*D2R),2)}배 늘어남). 키스톤·와핑 보정이 필요해요.`);
+  if (m.nits!=null && m.nits<10) w.push('휘도가 10 nit 미만이라 무대 조명이 조금만 새도 영상이 묻혀요.');
+  if (m.contrast<3) w.push(`조명이 켜지면 명암비가 ${f(m.contrast,1)}:1로 떨어져 영상 검은 부분이 회색으로 뜨고 대부분 묻혀요.`);
+  else if (m.contrast<10) w.push(`조명이 켜지면 명암비가 ${f(m.contrast,1)}:1이라 밝은 그래픽은 보이지만 어두운 장면은 흐려져요.`);
+  if (L.id==='ELPLX01' && (Math.abs(p.sv)>0.1||Math.abs(p.sh)>0.1)) w.push('초단초점 렌즈는 시프트 폭이 크게 줄어요. 사양을 확인하세요.');
+  if (!w.length) w.push('<span class="ok">한 면에 정상적으로 맺혀요.</span>');
+  $('warns').innerHTML = w.map(t=>t.startsWith('<span')?`<div class="ok">${t.replace(/<\/?span[^>]*>/g,'')}</div>`:`<div>${t}</div>`).join('');
+}
+
+// ---------- UI binding ----------
+const lensSel = $('lens');
+LENSES.forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=`${l.name} · ${l.min}${l.max!==l.min?'–'+l.max:''}`; lensSel.appendChild(o); });
+const fields = ['zoom','sv','sh','px','py','pz','yaw','pitch','roll'];
+const key = { px:'x', py:'y', pz:'z' };
+const fmt = {
+  zoom:p=>tr(p).toFixed(2), sv:p=>Math.round(p.sv*100)+'%', sh:p=>Math.round(p.sh*100)+'%',
+  px:p=>p.x.toFixed(2)+' m', py:p=>p.y.toFixed(2)+' m', pz:p=>p.z.toFixed(2)+' m',
+  yaw:p=>p.yaw+'°', pitch:p=>p.pitch+'°', roll:p=>p.roll+'°',
+};
+function syncUI(){
+  const p = projectors[sel];
+  $('selname').textContent = p ? '· '+p.name : '';
+  document.querySelectorAll('aside input, aside select, aside button').forEach(el=>{
+    if (['add','copy','ceil','gal','railH','galDepth','cubeH','stage','spill','floor','wall','mode','exp','amb','hmax','t-cast','t-aud','t-frus'].includes(el.id)) return;
+    if (el.closest('#chips')) return; el.disabled = !p; });
+  if (!p) return;
+  resolveMount(p);
+  $('pz').max = ROOM.H;
+  fields.forEach(id=>{ $(id).value = p[key[id]||id]; $('o-'+id).textContent = fmt[id](p); });
+  lensSel.value = p.lens; $('lm').value = p.lm;
+  document.querySelectorAll('[data-lens]').forEach(b=>b.classList.toggle('primary', b.dataset.lens===p.lens));
+  const L = lensById(p.lens); $('zoom').disabled = L.min===L.max;
+}
+function renderChips(){
+  $('chips').innerHTML = '';
+  projectors.forEach((p,i)=>{
+    const c = document.createElement('div'); c.className='chip'; c.setAttribute('role','tab');
+    c.setAttribute('aria-selected', i===sel); c.tabIndex=0;
+    c.innerHTML = `<input type="checkbox" id="on-${p.uid}" ${p.on?'checked':''} aria-label="${p.name} 켜기"><span class="dot" style="background:${p.color}"></span>${p.name}`;
+    c.addEventListener('click',e=>{ if(e.target.tagName==='INPUT') return; sel=i; renderChips(); syncUI(); dirty(); });
+    c.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); sel=i; renderChips(); syncUI(); dirty(); } });
+    c.querySelector('input').addEventListener('change',e=>{ p.on=e.target.checked; dirty(); });
+    $('chips').appendChild(c);
+  });
+  $('add').disabled = projectors.length>=NP;
+}
+fields.forEach(id=>$(id).addEventListener('input',e=>{
+  const p=projectors[sel]; if(!p) return;
+  if (id==='pz' || (id==='py'&&p.mount==='railRear') || (id==='px'&&p.mount==='railLeft')) p.mount=null;
+  p[key[id]||id] = +e.target.value; $('o-'+id).textContent = fmt[id](p); dirty();
+}));
+lensSel.addEventListener('change',()=>{ const p=projectors[sel]; p.lens=lensSel.value; syncUI(); dirty(); });
+$('lm').addEventListener('input',e=>{ const p=projectors[sel]; const v=+e.target.value; if(v>0){ p.lm=v; dirty(); } });
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
+  const p=projectors[sel]; if(!p) return; applyPreset(p,b.dataset.preset); syncUI(); dirty(); }));
+document.querySelectorAll('[data-lens]').forEach(b=>b.addEventListener('click',()=>{
+  preferLens = b.dataset.lens; const p=projectors[sel]; if(!p) return;
+  p.lens = preferLens; p.zoom = 0; if (p.yaw>-80 && p.yaw<80 && p.pitch<20) aim(p); syncUI(); dirty(); }));
+$('add').addEventListener('click',()=>{
+  if (projectors.length>=NP) return;
+  const order=['railRear','cubeRear','railLeft','cubeFront']; newProjector(order[projectors.length%4]);
+  sel=projectors.length-1; renderChips(); syncUI(); dirty();
+});
+$('del').addEventListener('click',()=>{
+  const p=projectors[sel]; if(!p) return;
+  helpers.remove(p.body,p.lbl,p.lines,p.stand); p.rt.dispose();
+  projectors.splice(sel,1);
+  projectors.forEach((q,i)=>{ if(q.tex===q.pattern){ q.name='P'+(i+1); q.color=PCOLORS[i%4]; q.pattern=makePattern(q); q.tex=q.pattern; }
+    q.body.children[0].material.color.set(q.color); helpers.remove(q.lbl); q.lbl=label(q.name,q.color,0.7); helpers.add(q.lbl); });
+  for (let i=projectors.length;i<NP;i++){ shared.pOn.value[i]=0; shared['pTex'+i].value=dummyTex; shared['pDep'+i].value=dummyDepth; }
+  sel=Math.max(0,Math.min(sel,projectors.length-1)); renderChips(); syncUI(); dirty();
+});
+$('pattern').addEventListener('click',()=>{ const p=projectors[sel]; if(!p) return;
+  if (p.media){ p.media.dispose(); p.media=null; } p.tex=p.pattern; dirty(); });
+$('media').addEventListener('change',e=>{
+  const p=projectors[sel], file=e.target.files[0]; if(!p||!file) return;
+  const url = URL.createObjectURL(file);
+  const set = t=>{ if(p.media) p.media.dispose(); p.media=t; p.tex=t; dirty(); };
+  if (file.type.startsWith('video')){
+    const v=document.createElement('video'); v.src=url; v.loop=true; v.muted=true; v.playsInline=true;
+    v.play().catch(()=>{}); set(new THREE.VideoTexture(v));
+  } else new THREE.TextureLoader().load(url, t=>set(t));
+  e.target.value='';
+});
+function bindRoom(id,prop,fmtv,after){
+  $(id).value = ROOM[prop]; $('o-'+id).textContent = fmtv(ROOM[prop]);
+  $(id).addEventListener('input',e=>{ ROOM[prop]=+e.target.value; $('o-'+id).textContent=fmtv(ROOM[prop]); after&&after(); dirty(); });
+}
+bindRoom('ceil','H',v=>v.toFixed(1)+' m',()=>{ buildRoom(); projectors.forEach(p=>p.z=Math.min(p.z,ROOM.H-0.1)); syncUI(); });
+const reaim = ()=>projectors.forEach(p=>{ if(p.mount && p.pitch<20){ resolveMount(p); aim(p); } });
+const roomChanged = ()=>{ buildRoom(); reaim(); syncUI(); };
+bindRoom('gal','gal',v=>v.toFixed(1)+' m',roomChanged);
+bindRoom('railH','railH',v=>v.toFixed(2)+' m',roomChanged);
+bindRoom('galDepth','galDepth',v=>v.toFixed(1)+' m',roomChanged);
+bindRoom('cubeH','cubeH',v=>v.toFixed(1)+' m',()=>{ reaim(); syncUI(); });
+$('floor').value='0.06'; $('wall').value='0.8'; MAT.floor.uniforms.uAlb.value.setRGB(0.06,0.06,0.06);
+$('floor').addEventListener('change',e=>{ const v=+e.target.value; MAT.floor.uniforms.uAlb.value.setRGB(v,v,v); dirty(); });
+$('wall').addEventListener('change',e=>{ const v=+e.target.value; MAT.front.uniforms.uAlb.value.setRGB(v,v,v); dirty(); });
+function bindShared(id,u,fmtv){ $(id).value=shared[u].value; $('o-'+id).textContent=fmtv(shared[u].value);
+  $(id).addEventListener('input',e=>{ shared[u].value=+e.target.value; $('o-'+id).textContent=fmtv(shared[u].value);
+    if(u==='uHeatMax'){ $('lg-max').textContent=shared[u].value; $('lg-mid').textContent=shared[u].value/2; } }); }
+bindShared('exp','uExp',v=>v.toFixed(3));
+bindShared('spill','uSpill',v=>Math.round(v*100)+'%');
+$('spill').addEventListener('input',()=>renderReadout());
+$('stage').value='0';
+$('stage').addEventListener('change',e=>{ shared.uStage.value=+e.target.value; renderReadout(); });
+bindShared('amb','uAmb',v=>Math.round(v*100)+'%');
+bindShared('hmax','uHeatMax',v=>v+' lux');
+$('mode').addEventListener('change',e=>{ shared.uMode.value=+e.target.value; $('legend').hidden = shared.uMode.value!==1; });
+$('t-cast').checked=true; $('t-aud').checked=true; $('t-frus').checked=true;
+$('t-cast').addEventListener('change',e=>{ castGroup.visible=e.target.checked; dirty(); });
+$('t-aud').addEventListener('change',e=>{ audGroup.visible=e.target.checked; dirty(); });
+$('t-frus').addEventListener('change',()=>dirty());
+
+$('copy').addEventListener('click',async()=>{
+  const lines = [`언더커버 삼신 투사 설정 (실내 ${ROOM.W}×${ROOM.D} m, 그리드 ${ROOM.H} m, 갤러리 ${ROOM.gal} m)`];
+  projectors.forEach(p=>{ const m=measure(p);
+    lines.push(`${p.name}${p.on?'':' (꺼짐)'}: ${p.lens} 투사비 ${f(m.W.t)} · 위치 X${f(p.x,1)} Y${f(p.y,1)} 높이${f(p.z,1)} m · 방향 ${p.yaw}° 숙임 ${p.pitch}° · 시프트 상하 ${Math.round(p.sv*100)}% 좌우 ${Math.round(p.sh*100)}%`
+      + ` → ${m.hc?m.hc.s.n:'—'} ${f(m.imgW)}×${f(m.imgH)} m(수직면 기준), 투사거리 ${f(m.z)} m, 중심 ${f(m.E,0)} lux / ${f(m.nits,1)} nit, 픽셀 ${f(m.px,1)} mm`);
+  });
+  const text = lines.join('\n');
+  try { await navigator.clipboard.writeText(text); $('copy').textContent='복사됨'; }
+  catch(_) { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); $('copy').textContent='복사됨'; }
+  setTimeout(()=>$('copy').textContent='설정 요약 복사',1500);
+});
+
+// ---------- views ----------
+function fitDist(w,h){ const t=Math.tan(camera.fov*D2R/2); return 1.08*Math.max((h/2)/t, (w/2)/(t*camera.aspect)); }
+const VIEWS = {
+  'v-orbit':()=>{ camera.position.set(-9,13,15); controls.target.set(0,1,-1); camera.fov=45; },
+  'v-top':  ()=>{ camera.fov=26; camera.position.set(0,fitDist(ROOM.W,ROOM.D)+ROOM.H,0.01); controls.target.set(0,0,0); },
+  'v-aud':  ()=>{ const e=toW(6.4,11.2,1.2); camera.position.copy(e); controls.target.copy(toW(6.0,2.0,1.4)); camera.fov=60; },
+  'v-side': ()=>{ camera.fov=30; camera.position.set(-(fitDist(ROOM.D,ROOM.H)+ROOM.W/2),ROOM.H/2,0.01); controls.target.set(0,ROOM.H/2,0); },
+};
+Object.keys(VIEWS).forEach(id=>$(id).addEventListener('click',()=>{
+  VIEWS[id](); camera.updateProjectionMatrix(); controls.update();
+  Object.keys(VIEWS).forEach(k=>$(k).setAttribute('aria-pressed',k===id)); }));
+
+// ---------- render loop ----------
+let needDepth = true;
+function dirty(){ needDepth = true; renderReadout(); save(); }
+const depthMat = new THREE.MeshBasicMaterial({ side:THREE.DoubleSide });
+function renderDepth(){
+  projectors.forEach((p,i)=>updateProjector(p,i));
+  helpers.visible = false; seatGroup.visible = true;
+  const ov = scene.overrideMaterial; scene.overrideMaterial = depthMat;
+  const sprites = []; occluders.traverse(o=>{ if(o.isSprite){ sprites.push(o); o.visible=false; } });
+  projectors.forEach(p=>{ if(!p.on) return; renderer.setRenderTarget(p.rt); renderer.clear(); renderer.render(scene,p.cam); });
+  sprites.forEach(s=>s.visible=true);
+  renderer.setRenderTarget(null); scene.overrideMaterial = ov; helpers.visible = true;
+  needDepth = false;
+}
+function resize(){
+  const r = $('view').getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false); camera.aspect = r.width/Math.max(1,r.height); camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('view'));
+function loop(){
+  if (needDepth) renderDepth();
+  controls.update(); renderer.render(scene,camera); requestAnimationFrame(loop);
+}
+
+// ---------- persistence (이 브라우저에만 저장) ----------
+const SKEY='samsin-proj-v4', ROOMKEYS=['H','gal','railH','galDepth','cubeH'];
+function save(){ try{ const room={}; ROOMKEYS.forEach(k=>room[k]=ROOM[k]);
+  localStorage.setItem(SKEY, JSON.stringify({ room,
+  p:projectors.map(p=>({on:p.on,x:p.x,y:p.y,z:p.z,yaw:p.yaw,pitch:p.pitch,roll:p.roll,lens:p.lens,zoom:p.zoom,sv:p.sv,sh:p.sh,lm:p.lm,mount:p.mount})) })); }catch(e){} }
+function load(){ try{ return JSON.parse(localStorage.getItem(SKEY)); }catch(e){ return null; } }
+
+// ---------- boot ----------
+const saved = load();
+if (saved && saved.room) ROOMKEYS.forEach(k=>{ if (+saved.room[k]>0) ROOM[k]=+saved.room[k]; });
+buildRoom(); buildSet();
+if (saved && saved.p && saved.p.length){ saved.p.slice(0,NP).forEach(s=>{ const p=newProjector(); Object.assign(p,s); }); }
+else newProjector('railRear');
+renderChips(); syncUI();
+[['ceil','H'],['gal','gal'],['railH','railH'],['galDepth','galDepth'],['cubeH','cubeH']].forEach(([id,k])=>{
+  $(id).value=ROOM[k]; $('o-'+id).textContent=ROOM[k].toFixed(id==='railH'?2:1)+' m'; });
+VIEWS['v-orbit'](); resize(); controls.update(); dirty();
+loop();
+})();
+</script>
+
+</body>
+</html>
